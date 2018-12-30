@@ -104,7 +104,8 @@ namespace ranges
             auto models_(any) ->
                 std::false_type;
 
-#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 5 && __GNUC_MINOR__ < 5
+#if (defined(__GNUC__) && !defined(__clang__) && __GNUC__ == 5 && __GNUC_MINOR__ < 5) || \
+    defined(RANGES_WORKAROUND_MSVC_701425)
             template<typename T>
             T gcc_bugs_bugs_bugs(T);
 
@@ -256,7 +257,7 @@ namespace ranges
                 template<typename From, typename To>
                 auto requires_() -> decltype(
                     concepts::valid_expr(
-                        concepts::is_true(std::is_convertible<From, To>{})
+                        concepts::is_true(detail::is_convertible<From, To>{})
                     ));
             };
 
@@ -280,7 +281,7 @@ namespace ranges
                 auto requires_() -> decltype(
                     concepts::valid_expr(
                         concepts::is_true(std::is_base_of<U, T>{}),
-                        concepts::is_true(std::is_convertible<
+                        concepts::is_true(detail::is_convertible<
                             meta::_t<std::remove_cv<T>> *, meta::_t<std::remove_cv<U>> *>{})
                     ));
             };

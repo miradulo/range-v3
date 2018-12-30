@@ -27,6 +27,7 @@
 #include <range/v3/utility/static_const.hpp>
 #include <range/v3/utility/tuple_algorithm.hpp>
 #include <range/v3/view/all.hpp>
+#include <range/v3/view/empty.hpp>
 
 namespace ranges
 {
@@ -71,6 +72,7 @@ namespace ranges
                 detail::cartesian_product_cardinality<Views...>::value>
         {
             friend range_access;
+            CONCEPT_ASSERT(sizeof...(Views) != 0);
             CONCEPT_ASSERT(meta::strict_and<ForwardView<Views>...>::value);
             using CanConst = meta::strict_and<
                 Range<Views const>...>;
@@ -186,6 +188,8 @@ namespace ranges
                     RANGES_EXPECT(sizeof...(Views) == 0);
                     RANGES_EXPECT(n == 0);
                 }
+RANGES_DIAGNOSTIC_PUSH
+RANGES_DIAGNOSTIC_IGNORE_DIVIDE_BY_ZERO
                 template<std::size_t N>
                 void advance_(meta::size_t<N>, std::intmax_t n)
                 {
@@ -235,6 +239,7 @@ namespace ranges
                     using D = difference_type_t<decltype(first)>;
                     i = first + static_cast<D>(n_mod);
                 }
+RANGES_DIAGNOSTIC_POP
                 void check_at_end_(meta::size_t<0>, bool = false)
                 {
                     CONCEPT_ASSERT(sizeof...(Views) == 0);
@@ -352,7 +357,11 @@ namespace ranges
               : views_{detail::move(views)...}
             {}
             CONCEPT_REQUIRES(my_cardinality >= 0)
+#ifdef RANGES_WORKAROUND_MSVC_DC338193
+            constexpr std::intmax_t size() const noexcept
+#else // ^^^ workaround / no workaround vvv
             constexpr static std::intmax_t size() noexcept
+#endif // RANGES_WORKAROUND_MSVC_DC338193
             {
                 return std::intmax_t{my_cardinality};
             }
@@ -378,10 +387,18 @@ namespace ranges
                 using Constraint = meta::strict_and<ForwardRange<Rngs>...>;
 
                 template<typename... Rngs,
-                    CONCEPT_REQUIRES_(Constraint<Rngs...>())>
-                constexpr cartesian_product_view<all_t<Rngs>...> operator()(Rngs &&... rngs) const
+                    CONCEPT_REQUIRES_(sizeof...(Rngs) != 0 && Constraint<Rngs...>())>
+                constexpr cartesian_product_view<all_t<Rngs>...>
+                operator()(Rngs &&... rngs) const
                 {
-                    return cartesian_product_view<all_t<Rngs>...>{all((Rngs &&) rngs)...};
+                    return cartesian_product_view<all_t<Rngs>...>{
+                        all(static_cast<Rngs &&>(rngs))...};
+                }
+
+                CONCEPT_REQUIRES(Constraint<>())
+                constexpr empty_view<std::tuple<>> operator()() const noexcept
+                {
+                    return {};
                 }
 
                 template<typename... Rngs,
