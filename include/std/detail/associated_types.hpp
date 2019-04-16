@@ -111,40 +111,10 @@ namespace ranges
         using difference_result_t =
             decltype(std::declval<T const &>() - std::declval<T const &>());
 
-        template<std::size_t N, typename = void>
-        struct promote_as_signed_
-        {
-            // This shouldn't cause us to LOSE precision, but maybe it doesn't
-            // net us any either.
-            static_assert(sizeof(std::intmax_t) * CHAR_BIT >= N,
-                "Possible extended integral type?");
-            using difference_type = std::intmax_t;
-        };
-
-        template<std::size_t N>
-        struct promote_as_signed_<N, enable_if_t<(N < 16)>>
-        {
-            using difference_type = std::int_fast16_t;
-        };
-
-        template<std::size_t N>
-        struct promote_as_signed_<N, enable_if_t<(N >= 16 && N < 32)>>
-        {
-            using difference_type = std::int_fast32_t;
-        };
-
-        template<std::size_t N>
-        struct promote_as_signed_<N, enable_if_t<(N >= 32 && N < 64)>>
-        {
-            using difference_type = std::int_fast64_t;
-        };
-
         template<typename, typename = void>
         struct incrementable_traits_2_
         {};
 
-        // Not to spec: if possible, promote the difference type of integral types
-        // to be large enough to fully represent the domain.
         template<typename T>
         struct incrementable_traits_2_<
             T,
@@ -153,14 +123,9 @@ namespace ranges
 #else // ^^^ workaround / no workaround vvv
             always_<void, int[is_integral_<difference_result_t<T>>(0)]>>
 #endif // RANGES_WORKAROUND_MSVC_785522
-          : if_then_t<
-                is_integral_<T>(0),
-                promote_as_signed_<sizeof(T) * CHAR_BIT>,
-                if_then_t<
-                    ((difference_result_t<T>)-1 > (difference_result_t<T>)0), // unsigned
-                    promote_as_signed_<sizeof(difference_result_t<T>) * CHAR_BIT>,
-                    with_difference_type_<difference_result_t<T>>>>
-        {};
+        {
+            using difference_type = std::make_signed_t<difference_result_t<T>>;
+        };
 
         template<typename T, typename = void>
         struct incrementable_traits_1_

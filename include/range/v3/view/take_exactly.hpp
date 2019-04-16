@@ -74,8 +74,7 @@ namespace ranges
             }
             auto size() const
             {
-                using size_type = meta::_t<std::make_unsigned<range_difference_t<Rng>>>;
-                return static_cast<size_type>(n_);
+                return static_cast<detail::iter_size_t<iterator_t<Rng>>>(n_);
             }
             Rng base() const
             {
@@ -118,10 +117,9 @@ namespace ranges
             {
                 return ranges::begin(rng_) + n_;
             }
-            meta::_t<std::make_unsigned<range_difference_t<Rng>>> size() const
+            detail::iter_size_t<iterator_t<Rng>> size() const
             {
-                using size_type = meta::_t<std::make_unsigned<range_difference_t<Rng>>>;
-                return static_cast<size_type>(n_);
+                return static_cast<detail::iter_size_t<iterator_t<Rng>>>(n_);
             }
             Rng base() const
             {

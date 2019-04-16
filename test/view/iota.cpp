@@ -79,7 +79,7 @@ int main()
     auto chars = view::ints(std::numeric_limits<signed char>::min(),
                             std::numeric_limits<signed char>::max());
     CPP_assert(RandomAccessRange<decltype(chars)>);
-    CPP_assert(Same<std::int_fast16_t, range_difference_t<decltype(chars)>>);
+    CPP_assert(Same<int, range_difference_t<decltype(chars)>>);
     ::models<RandomAccessViewConcept>(aux::copy(chars));
     models<BoundedViewConcept>(aux::copy(chars));
     CHECK(distance(chars.begin(), chars.end()) == (long) CHAR_MAX - (long) CHAR_MIN);

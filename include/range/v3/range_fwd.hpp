@@ -413,6 +413,17 @@ namespace ranges
     template<typename I, typename S>
     struct common_iterator;
 
+    /// \cond
+    namespace detail
+    {
+        template<typename I>
+        struct cpp17_iterator_cursor;
+
+        template<typename I>
+        using cpp17_iterator = basic_iterator<cpp17_iterator_cursor<I>>;
+    }
+    /// \endcond
+
     template<typename First, typename Second>
     struct compressed_pair;
 

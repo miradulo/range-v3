@@ -22,6 +22,7 @@
 #include <concepts/concepts.hpp>
 #include <range/v3/range_fwd.hpp>
 #include <range/v3/iterator/default_sentinel.hpp>
+#include <range/v3/iterator/diffmax_t.hpp>
 #include <range/v3/view/delimit.hpp>
 #include <range/v3/view/facade.hpp>
 #include <range/v3/view/take_exactly.hpp>
@@ -29,68 +30,108 @@
 
 namespace ranges
 {
-    CPP_def
-    (
-        template(typename I)
-        concept Decrementable_,
-            requires (I i)
-            (
-                --i,
-                i--,
-                concepts::requires_<Same<I&, decltype(--i)>>,
-                concepts::requires_<Same<I, decltype(i--)>>
-            ) &&
-            Incrementable<I>
-    );
-
-    CPP_def
-    (
-        template(typename I)
-        concept Advanceable_,
-            requires (I i, I const j, iter_difference_t<I> const n)
-            (
-                j - j,
-                i += n,
-                i -= n,
-                i - n,
-                i + n,
-                n + i,
-                // Not to spec: see https://github.com/ericniebler/stl2/issues/612
-                concepts::requires_<Integral<decltype(j - j)>>,
-                concepts::requires_<Same<I&, decltype(i += n)>>,
-                concepts::requires_<Same<I&, decltype(i -= n)>>,
-                concepts::requires_<ConvertibleTo<decltype(i - n), I>>,
-                concepts::requires_<ConvertibleTo<decltype(i + n), I>>,
-                concepts::requires_<ConvertibleTo<decltype(n + i), I>>
-            ) &&
-            Decrementable_<I> && StrictTotallyOrdered<I>
-    );
-
     /// \cond
     namespace detail
     {
+        template<std::size_t N, typename = void>
+        struct promote_as_signed_
+        {
+            // // This shouldn't cause us to LOSE precision, but maybe it doesn't
+            // // net us any either.
+            // static_assert(sizeof(std::intmax_t) * CHAR_BIT >= N,
+            //     "Possible extended integral type?");
+            using difference_type = diffmax_t; //std::intmax_t;
+        };
+
+        template<std::size_t N>
+        struct promote_as_signed_<N, enable_if_t<(N < 16)>>
+        {
+            using difference_type = std::int_fast16_t;
+        };
+
+        template<std::size_t N>
+        struct promote_as_signed_<N, enable_if_t<(N >= 16 && N < 32)>>
+        {
+            using difference_type = std::int_fast32_t;
+        };
+
+        template<std::size_t N>
+        struct promote_as_signed_<N, enable_if_t<(N >= 32 && N < 64)>>
+        {
+            using difference_type = std::int_fast64_t;
+        };
+
         template<typename I>
-        auto iota_advance_(I &i, iter_difference_t<I> n) ->
+        using iota_difference_t =
+            typename if_then_t<
+                std::is_integral<I>::value && sizeof(I) == sizeof(iter_difference_t<I>),
+                promote_as_signed_<sizeof(iter_difference_t<I>) * CHAR_BIT>,
+                with_difference_type_<iter_difference_t<I>>>::difference_type;
+
+        CPP_def
+        (
+            template(typename I)
+            concept Decrementable_,
+                requires (I i)
+                (
+                    --i,
+                    i--,
+                    concepts::requires_<Same<I&, decltype(--i)>>,
+                    concepts::requires_<Same<I, decltype(i--)>>
+                ) &&
+                Incrementable<I>
+        );
+
+        CPP_def
+        (
+            template(typename I)
+            concept Advanceable_,
+                requires (I i, I const j, iota_difference_t<I> const n)
+                (
+                    j - j,
+                    i += n,
+                    i -= n,
+                    static_cast<I>(i - n),
+                    static_cast<I>(i + n),
+                    static_cast<I>(n + i),
+                    // NOT TO SPEC:
+                    // Unsigned integers are advanceable, but subtracting them results in
+                    // an unsigned integral, which is not the same as the difference type,
+                    // which is signed.
+                    concepts::requires_<ConvertibleTo<decltype(j - j), iota_difference_t<I>>>,
+                    concepts::requires_<Same<I&, decltype(i += n)>>,
+                    concepts::requires_<Same<I&, decltype(i -= n)>> //,
+                    // concepts::requires_<ConvertibleTo<decltype(i - n), I>>,
+                    // concepts::requires_<ConvertibleTo<decltype(i + n), I>>,
+                    // concepts::requires_<ConvertibleTo<decltype(n + i), I>>
+                ) &&
+                Decrementable_<I> && StrictTotallyOrdered<I>
+        );
+
+        template<typename I>
+        auto iota_advance_(I &i, iota_difference_t<I> n) ->
             CPP_ret(void)(
                 requires (!UnsignedIntegral<I>))
         {
+            // TODO: bounds-check this
             i += n;
         }
 
         template<typename Int>
-        auto iota_advance_(Int &i, iter_difference_t<Int> n) ->
+        auto iota_advance_(Int &i, iota_difference_t<Int> n) ->
             CPP_ret(void)(
                 requires UnsignedIntegral<Int>)
         {
+            // TODO: bounds-check this
             if(n >= 0)
-                i += (Int) n;
+                i += static_cast<Int>(n);
             else
-                i -= (Int) -n;
+                i -= static_cast<Int>(-n);
         }
 
         template<typename I, typename S>
         auto iota_distance_(I const &i, S const &s) ->
-            CPP_ret(iter_difference_t<I>)(
+            CPP_ret(iota_difference_t<I>)(
                 requires SizedSentinel<S, I>)
         {
             return s - i;
@@ -98,54 +139,58 @@ namespace ranges
 
         template<typename Int>
         auto iota_distance_(Int i0, Int i1) ->
-            CPP_ret(iter_difference_t<Int>)(
+            CPP_ret(iota_difference_t<Int>)(
                 requires SignedIntegral<Int>)
         {
-            return (iter_difference_t<Int>) i1 - (iter_difference_t<Int>) i0;
+            // TODO: bounds-check this
+            return static_cast<iota_difference_t<Int>>(
+                static_cast<iota_difference_t<Int>>(i1) -
+                static_cast<iota_difference_t<Int>>(i0));
         }
 
         template<typename Int>
         auto iota_distance_(Int i0, Int i1) ->
-            CPP_ret(iter_difference_t<Int>)(
+            CPP_ret(iota_difference_t<Int>)(
                 requires UnsignedIntegral<Int>)
         {
+            // TODO: bounds-check this
             return (i0 > i1)
-              ? -(iter_difference_t<Int>) (i0 - i1)
-              : (iter_difference_t<Int>) (i1 - i0);
+              ? static_cast<iota_difference_t<Int>>(-static_cast<iota_difference_t<Int>>(i0 - i1))
+              : static_cast<iota_difference_t<Int>>(i1 - i0);
         }
     }
     /// \endcond
 
     /// \cond
-	namespace iota_view_detail
+    namespace iota_view_detail
     {
-		struct adl_hook
+        struct adl_hook
         {};
 
-		// Extension: iota_view models forwarding-range, as suggested by
-		// https://github.com/ericniebler/stl2/issues/575
-		template<class From, class To>
-		constexpr auto begin(iota_view<From, To> r)
+        // Extension: iota_view models forwarding-range, as suggested by
+        // https://github.com/ericniebler/stl2/issues/575
+        template<class From, class To>
+        constexpr auto begin(iota_view<From, To> r)
         {
-			return r.begin();
-		}
-		template<class From, class To>
-		constexpr auto end(iota_view<From, To> r)
+            return r.begin();
+        }
+        template<class From, class To>
+        constexpr auto end(iota_view<From, To> r)
         {
-			return r.end();
-		}
+            return r.end();
+        }
 
-		template<class From, class To>
-		constexpr auto begin(closed_iota_view<From, To> r)
+        template<class From, class To>
+        constexpr auto begin(closed_iota_view<From, To> r)
         {
-			return r.begin();
-		}
-		template<class From, class To>
-		constexpr auto end(closed_iota_view<From, To> r)
+            return r.begin();
+        }
+        template<class From, class To>
+        constexpr auto end(closed_iota_view<From, To> r)
         {
-			return r.end();
-		}
-	}
+            return r.end();
+        }
+    }
     /// \endcond
 
     /// \addtogroup group-views
@@ -165,6 +210,7 @@ namespace ranges
 
         struct cursor
         {
+            using difference_type = detail::iota_difference_t<From>;
         private:
             friend range_access;
             From from_ = From();
@@ -197,7 +243,7 @@ namespace ranges
             }
             CPP_member
             auto prev() -> CPP_ret(void)(
-                requires Decrementable_<From>)
+                requires detail::Decrementable_<From>)
             {
                 if(done_)
                     done_ = false;
@@ -205,33 +251,35 @@ namespace ranges
                     --from_;
             }
             CPP_member
-            auto advance(iter_difference_t<From> n) ->
+            auto advance(difference_type n) ->
                 CPP_ret(void)(
-                    requires Advanceable_<From>)
+                    requires detail::Advanceable_<From>)
             {
                 if(n > 0)
                 {
                     RANGES_ENSURE(detail::iota_distance_(from_, to_) >= n - !done_);
-                    detail::iota_advance_(from_, n - (done_ = (detail::iota_distance_(from_, to_) <= n - !done_)));
+                    detail::iota_advance_(
+                        from_,
+                        n - (done_ = (detail::iota_distance_(from_, to_) <= n - !done_)));
                 }
                 else if(n < 0)
                     detail::iota_advance_(from_, n + std::exchange(done_, false));
             }
             CPP_member
             auto distance_to(cursor const &that) const ->
-                CPP_ret(iter_difference_t<From>)(
-                    requires Advanceable_<From>)
+                CPP_ret(difference_type)(
+                    requires detail::Advanceable_<From>)
             {
-                using D = iter_difference_t<From>;
+                using D = difference_type;
                 return static_cast<D>(detail::iota_distance_(from_, that.from_))
                     + ((D) that.done_ - (D) done_);
             }
             CPP_member
             auto distance_to(default_sentinel_t) const ->
-                CPP_ret(iter_difference_t<From>)(
+                CPP_ret(difference_type)(
                     requires SizedSentinel<To, From>)
             {
-                return iter_difference_t<From>(to_ - from_) + !done_;
+                return difference_type(to_ - from_) + !done_;
             }
         public:
             cursor() = default;
@@ -316,6 +364,7 @@ namespace ranges
 
         struct cursor
         {
+            using difference_type = detail::iota_difference_t<From>;
         private:
             friend range_access;
             From from_;
@@ -341,13 +390,13 @@ namespace ranges
             }
             CPP_member
             auto prev() -> CPP_ret(void)(
-                requires Decrementable_<From>)
+                requires detail::Decrementable_<From>)
             {
                 --from_;
             }
             CPP_member
-            auto advance(iter_difference_t<From> n) -> CPP_ret(void)(
-                requires Advanceable_<From>)
+            auto advance(difference_type n) -> CPP_ret(void)(
+                requires detail::Advanceable_<From>)
             {
                 detail::iota_advance_(from_, n);
             }
@@ -356,15 +405,15 @@ namespace ranges
             // Reimplement iota_view without view_facade or basic_iterator.
             CPP_member
             auto distance_to(cursor const &that) const ->
-                CPP_ret(iter_difference_t<From>)(
-                    requires Advanceable_<From>)
+                CPP_ret(difference_type)(
+                    requires detail::Advanceable_<From>)
             {
                 return detail::iota_distance_(from_, that.from_);
             }
             // Extension: see https://github.com/ericniebler/stl2/issues/613
             CPP_member
             auto distance_to(sentinel const &that) const ->
-                CPP_ret(iter_difference_t<From>)(
+                CPP_ret(difference_type)(
                     requires SizedSentinel<To, From>)
             {
                 return that.to_ - from_;

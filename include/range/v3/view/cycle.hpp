@@ -134,9 +134,9 @@ namespace ranges
                 }
                 --it_;
             }
-            CPP_member
-            auto advance(std::intmax_t n) -> CPP_ret(void)(
-                requires RandomAccessRange<CRng>)
+            template<typename Diff>
+            auto advance(Diff n) -> CPP_ret(void)(
+                requires RandomAccessRange<CRng> && detail::IntegerLike_<Diff>)
             {
                 auto const begin = ranges::begin(rng_->rng_);
                 auto const end = this->get_end_(
@@ -150,9 +150,8 @@ namespace ranges
                 it_ = begin + static_cast<D>(off < 0 ? off + dist : off);
             }
             CPP_member
-            auto distance_to(cursor const &that) const ->
-                CPP_ret(std::intmax_t)(
-                    requires SizedSentinel<iterator, iterator>)
+            auto CPP_fun(distance_to)(cursor const &that) (const
+                requires SizedSentinel<iterator, iterator>)
             {
                 RANGES_EXPECT(that.rng_ == rng_);
                 auto const begin = ranges::begin(rng_->rng_);
@@ -165,7 +164,7 @@ namespace ranges
 
         CPP_member
         auto begin_cursor() -> CPP_ret(cursor<false>)(
-                requires (!simple_view<Rng>() || !CommonRange<Rng const>))
+            requires (!simple_view<Rng>() || !CommonRange<Rng const>))
         {
             return {*this};
         }

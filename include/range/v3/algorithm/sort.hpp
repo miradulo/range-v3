@@ -185,7 +185,8 @@ namespace ranges
             I end = ranges::next(begin, std::move(end_));
             if(begin != end)
             {
-                sort_fn::introsort_loop(begin, end, sort_fn::log2(end - begin) * 2, pred, proj);
+                sort_fn::introsort_loop(begin, end, sort_fn::log2((std::ptrdiff_t)(end - begin)) * 2, pred, proj);
+                //sort_fn::introsort_loop(begin, end, sort_fn::log2(end - begin) * 2, pred, proj);
                 sort_fn::final_insertion_sort(begin, end, pred, proj);
             }
             return end;
